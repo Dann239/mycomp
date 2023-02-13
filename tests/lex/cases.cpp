@@ -18,7 +18,7 @@ std::vector<mycomp::Token> wrap_lex(std::string_view str) {
     try {
         return mycomp::lex(str);
     }
-    catch(const mycomp::LexError& e) {
+    catch(const mycomp::LexException& e) {
         throw std::runtime_error(e.error);
     }
 }

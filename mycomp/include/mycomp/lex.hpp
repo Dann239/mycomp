@@ -51,7 +51,7 @@ struct Token {
     > payload;
 };
 
-struct LexError {
+struct LexException {
     size_t begin_pos, end_pos;
     std::string error;
 };

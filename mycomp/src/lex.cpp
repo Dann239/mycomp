@@ -53,288 +53,257 @@ static_assert(std::ranges::is_sorted(
     }
 ), "We want our special tokens to come in descending order of size");
 
-struct ScannerImpl {
-    ScannerImpl(std::string_view code) : code_(code) {}
 
-    bool end() const {
-        return ind_ == code_.size();
-    }
-    char curr() const {
-        return end() ? '\n' : code_[ind_];
-    }
-    void advance(size_t delta = 1) {
-        if(!end())
-            ind_ += delta;
-    }
-    char peek(size_t delta = 1) const {
-        return ind_ + delta < code_.size() ? code_[ind_ + delta] : '\n';
-    }
-    std::string_view substr(size_t delta = std::string_view::npos) {
-        return code_.substr(ind_, delta);
-    }
-    size_t ind() const {
-        return ind_;
-    }
-    std::string_view raw() const {
-        return code_;
-    }
-private:
-    std::string_view code_;
-    size_t ind_ = 0;
-};
+Lexer::Lexer(std::string_view code) : s_(code) {}
 
-struct LexerImpl {
-    LexerImpl(std::string_view code) : s_(code) {}
 
-    Token next() {
-        skipWhitespaceAndComments();
-        char c = s_.curr(), c2 = s_.peek();
+std::optional<Token> Lexer::next() {
+    skipWhitespaceAndComments();
+    char c = s_.curr(), c2 = s_.peek();
 
-        if(std::isdigit(c))
-            return parseNumber();
-        if(c == '.' && std::isdigit(c2))
-            return parseNumber();
-        if(c == '_' || std::isalpha(c))
-            return parseWord();
-        if(c == '"')
-            return parseString();
-        if(std::ispunct(c))
-            return parseSpecialToken();
+    if(s_.end())
+        return {};
+    if(std::isdigit(c))
+        return parseNumber();
+    if(c == '.' && std::isdigit(c2))
+        return parseNumber();
+    if(c == '_' || std::isalpha(c))
+        return parseWord();
+    if(c == '"')
+        return parseString();
+    if(std::ispunct(c))
+        return parseSpecialToken();
 
-        throw LexException{
-            .begin_pos=s_.ind(),
-            .end_pos=s_.ind() + 1,
-            .error="Unrecognized character!"
-        };
-    }
+    throw LexException{
+        .begin_pos=s_.ind(),
+        .end_pos=s_.ind() + 1,
+        .error="Unrecognized character!"
+    };
+}
 
-    bool end() {
-        skipWhitespaceAndComments();
-        return s_.end();
-    }
 
-private:
-    void skipWhitespaceAndComments() {
-        while(!s_.end()) {
-            if(std::isspace(s_.curr()))
+void Lexer::skipWhitespaceAndComments() {
+    while(!s_.end()) {
+        if(std::isspace(s_.curr()))
+            s_.advance();
+        else if(s_.substr(2) == "//")
+            while(!s_.end() && s_.curr() != '\n')
                 s_.advance();
-            else if(s_.substr(2) == "//")
-                while(!s_.end() && s_.curr() != '\n')
-                    s_.advance();
-            else if(s_.substr(2) == "/*") {
-                auto ind_start = s_.ind();
-                s_.advance(2);
-                while(s_.substr(2) != "*/") {
-                    s_.advance();
-                    if(s_.end())
-                        throw LexException{
-                            .begin_pos=ind_start,
-                            .end_pos=ind_start + 2,
-                            .error="Inline comment not terminated!"
-                        };
-                }
-                s_.advance(2);
-            } else if(s_.substr(2) == "*/")
-                throw LexException{
-                    .begin_pos=s_.ind(),
-                    .end_pos=s_.ind() + 2,
-                    .error="Unexpected inline comment terminator encountered!"
-                };
-            else
-                break;
+        else if(s_.substr(2) == "/*") {
+            auto ind_start = s_.ind();
+            s_.advance(2);
+            while(s_.substr(2) != "*/") {
+                s_.advance();
+                if(s_.end())
+                    throw LexException{
+                        .begin_pos=ind_start,
+                        .end_pos=ind_start + 2,
+                        .error="Inline comment not terminated!"
+                    };
+            }
+            s_.advance(2);
+        } else if(s_.substr(2) == "*/")
+            throw LexException{
+                .begin_pos=s_.ind(),
+                .end_pos=s_.ind() + 2,
+                .error="Unexpected inline comment terminator encountered!"
+            };
+        else
+            break;
+    }
+}
+
+
+Token Lexer::parseNumber() {
+    bool is_base16 = false;
+    bool has_point = false;
+    bool has_exponent = false;
+
+    auto ind_start = s_.ind();
+
+    if(s_.curr() == '0') {
+        char c2 = s_.peek();
+        if(std::isdigit(c2))
+            throw LexException{
+                .begin_pos=ind_start,
+                .end_pos=ind_start + 1,
+                .error="Leading zero in a number!"
+            };
+
+        if(c2 == 'x' || c2 == 'X') {
+            is_base16 = true;
+            s_.advance(2); // skip 0x
         }
     }
 
-
-    Token parseNumber() {
-        bool is_base16 = false;
-        bool has_point = false;
-        bool has_exponent = false;
-
-        auto ind_start = s_.ind();
-
-        if(s_.curr() == '0') {
-            char c2 = s_.peek();
-            if(std::isdigit(c2))
-                throw LexException{
-                    .begin_pos=ind_start,
-                    .end_pos=ind_start + 1,
-                    .error="Leading zero in a number!"
-                };
-
-            if(c2 == 'x' || c2 == 'X') {
-                is_base16 = true;
-                s_.advance(2); // skip 0x
-            }
-        }
-
-        const auto* start_ptr = s_.raw().data() + s_.ind();
-        for(; !s_.end(); s_.advance()) {
-            char c = s_.curr();
-            if(c == '.') {
-                if(has_point || has_exponent)
-                    throw LexException{
-                        .begin_pos=s_.ind(),
-                        .end_pos=s_.ind() + 1,
-                        .error="Unexpected point in a number!"
-                    };
-                else
-                    has_point = true;
-            }
-            else if(c == 'e' || c == 'E') {
-                if(has_exponent)
-                    throw LexException{
-                        .begin_pos=s_.ind(),
-                        .end_pos=s_.ind() + 1,
-                        .error="Unexpected E in a number!"
-                    };
-                else {
-                    has_exponent = true;
-                    if(s_.peek() == '-')
-                        s_.advance(); // '-' is ok here
-                }
-            }
-            else if(std::isspace(c) || std::ispunct(c))
-                break;
-            else if(!std::isdigit(c))
+    const auto* start_ptr = s_.raw().data() + s_.ind();
+    for(; !s_.end(); s_.advance()) {
+        char c = s_.curr();
+        if(c == '.') {
+            if(has_point || has_exponent)
                 throw LexException{
                     .begin_pos=s_.ind(),
                     .end_pos=s_.ind() + 1,
-                    .error=fmt::format("Unexpected character in a number: '{}'!", c)
+                    .error="Unexpected point in a number!"
                 };
+            else
+                has_point = true;
         }
-        const char* end_ptr = s_.raw().data() + s_.ind();
+        else if(c == 'e' || c == 'E') {
+            if(has_exponent)
+                throw LexException{
+                    .begin_pos=s_.ind(),
+                    .end_pos=s_.ind() + 1,
+                    .error="Unexpected E in a number!"
+                };
+            else {
+                has_exponent = true;
+                if(s_.peek() == '-')
+                    s_.advance(); // '-' is ok here
+            }
+        }
+        else if(std::isspace(c) || std::ispunct(c))
+            break;
+        else if(!std::isdigit(c))
+            throw LexException{
+                .begin_pos=s_.ind(),
+                .end_pos=s_.ind() + 1,
+                .error=fmt::format("Unexpected character in a number: '{}'!", c)
+            };
+    }
+    const char* end_ptr = s_.raw().data() + s_.ind();
 
-        bool is_float = has_point || has_exponent;
+    bool is_float = has_point || has_exponent;
 
-        Token res{
-            .tokenType=is_float ? REAL_NUMBER : NATURAL_NUMBER,
+    Token res{
+        .tokenType=is_float ? REAL_NUMBER : NATURAL_NUMBER,
+        .begin_pos=ind_start,
+        .end_pos=s_.ind()
+    };
+
+    auto check_fc_result = [&](std::from_chars_result r) {
+        auto [last, errc] = r;
+        if(errc != std::errc{})
+            throw LexException{
+                .begin_pos=res.begin_pos,
+                .end_pos=res.end_pos,
+                .error=fmt::format(
+                    "Error in from_chars while parsing a number: {}",
+                    std::make_error_code(errc).message()
+                )
+            };
+        if(last != end_ptr)
+            throw LexException{
+                .begin_pos=res.begin_pos,
+                .end_pos=res.end_pos,
+                .error="Number could not be fully parsed!"
+            };
+    };
+
+    if(is_float) {
+        double val = {};
+        check_fc_result(std::from_chars(
+            start_ptr,
+            end_ptr,
+            val,
+            is_base16 ? std::chars_format::hex : std::chars_format::general
+        ));
+        res.payload = val;
+    }
+    else {
+        std::uint64_t val = {};
+        check_fc_result(std::from_chars(
+            start_ptr,
+            end_ptr,
+            val,
+            is_base16 ? 16 : 10
+        ));
+        res.payload = val;
+    }
+    return res;
+}
+
+
+Token Lexer::parseString() {
+    auto ind_start = s_.ind();
+    s_.advance(); // skip the '"'
+    while(s_.curr() != '"') {
+        if(s_.curr() == '\\')
+            throw LexException{
+                .begin_pos=s_.ind(),
+                .end_pos=s_.ind() + 1,
+                .error="Escape sequences inside strings are not supported yet!"
+            };
+        s_.advance();
+        if(s_.end())
+            throw LexException{
+                .begin_pos=ind_start,
+                .end_pos=ind_start + 1,
+                .error="String literal is not terminated!"
+            };
+    }
+    s_.advance(); // skip the '"'
+
+    return Token{
+        .tokenType=STRING,
+        .begin_pos=ind_start,
+        .end_pos=s_.ind(),
+        .payload=std::string(s_.raw().substr(ind_start + 1, (s_.ind() - 1) - (ind_start + 1)))
+    };
+}
+
+
+Token Lexer::parseWord() {
+    constexpr std::span keyword_span = keywords;
+    static const std::unordered_map<std::string_view, TokenType> keyword_map{keyword_span.begin(), keyword_span.end()};
+    auto ind_start = s_.ind();
+    while(std::isalnum(s_.curr()) || s_.curr() == '_')
+        s_.advance();
+    auto word = s_.raw().substr(ind_start, s_.ind() - ind_start);
+    if(auto iter = keyword_map.find(word); iter != keyword_map.end())
+        return Token{
+            .tokenType=iter->second,
             .begin_pos=ind_start,
             .end_pos=s_.ind()
         };
-
-        auto check_fc_result = [&](std::from_chars_result r) {
-            auto [last, errc] = r;
-            if(errc != std::errc{})
-                throw LexException{
-                    .begin_pos=res.begin_pos,
-                    .end_pos=res.end_pos,
-                    .error=fmt::format(
-                        "Error in from_chars while parsing a number: {}",
-                        std::make_error_code(errc).message()
-                    )
-                };
-            if(last != end_ptr)
-                throw LexException{
-                    .begin_pos=res.begin_pos,
-                    .end_pos=res.end_pos,
-                    .error="Number could not be fully parsed!"
-                };
-        };
-
-        if(is_float) {
-            double val = {};
-            check_fc_result(std::from_chars(
-                start_ptr,
-                end_ptr,
-                val,
-                is_base16 ? std::chars_format::hex : std::chars_format::general
-            ));
-            res.payload = val;
-        }
-        else {
-            std::uint64_t val = {};
-            check_fc_result(std::from_chars(
-                start_ptr,
-                end_ptr,
-                val,
-                is_base16 ? 16 : 10
-            ));
-            res.payload = val;
-        }
-        return res;
-    }
-
-
-    Token parseString() {
-        auto ind_start = s_.ind();
-        s_.advance(); // skip the '"'
-        while(s_.curr() != '"') {
-            if(s_.curr() == '\\')
-                throw LexException{
-                    .begin_pos=s_.ind(),
-                    .end_pos=s_.ind() + 1,
-                    .error="Escape sequences inside strings are not supported yet!"
-                };
-            s_.advance();
-            if(s_.end())
-                throw LexException{
-                    .begin_pos=ind_start,
-                    .end_pos=ind_start + 1,
-                    .error="String literal is not terminated!"
-                };
-        }
-        s_.advance(); // skip the '"'
-
+    else
         return Token{
-            .tokenType=STRING,
+            .tokenType=IDENTIFIER,
             .begin_pos=ind_start,
             .end_pos=s_.ind(),
-            .payload=std::string(s_.raw().substr(ind_start + 1, (s_.ind() - 1) - (ind_start + 1)))
+            .payload=std::string{word}
         };
-    }
+}
 
 
-    Token parseWord() {
-        constexpr std::span keyword_span = keywords;
-        static const std::unordered_map<std::string_view, TokenType> keyword_map{keyword_span.begin(), keyword_span.end()};
-        auto ind_start = s_.ind();
-        while(std::isalnum(s_.curr()) || s_.curr() == '_')
-            s_.advance();
-        auto word = s_.raw().substr(ind_start, s_.ind() - ind_start);
-        if(auto iter = keyword_map.find(word); iter != keyword_map.end())
+Token Lexer::parseSpecialToken() {
+    for(auto [str, tok] : special_tokens)
+        if(s_.substr().starts_with(str)) {
+            s_.advance(str.size());
             return Token{
-                .tokenType=iter->second,
-                .begin_pos=ind_start,
-                .end_pos=s_.ind()
+                .tokenType=tok,
+                .begin_pos=s_.ind(),
+                .end_pos=s_.ind() + str.size()
             };
-        else
-            return Token{
-                .tokenType=IDENTIFIER,
-                .begin_pos=ind_start,
-                .end_pos=s_.ind(),
-                .payload=std::string{word}
-            };
-    }
+        }
 
+    throw LexException{
+        .begin_pos=s_.ind(),
+        .end_pos=s_.ind() + 1,
+        .error="Unexpected sequence of special characters"
+    };
+}
 
-    Token parseSpecialToken() {
-        for(auto [str, tok] : special_tokens)
-            if(s_.substr().starts_with(str)) {
-                s_.advance(str.size());
-                return Token{
-                    .tokenType=tok,
-                    .begin_pos=s_.ind(),
-                    .end_pos=s_.ind() + str.size()
-                };
-            }
-
-        throw LexException{
-            .begin_pos=s_.ind(),
-            .end_pos=s_.ind() + 1,
-            .error="Unexpected sequence of special characters"
-        };
-    }
-
-    ScannerImpl s_;
-};
 
 std::vector<Token> lex(std::string_view code) {
     std::vector<Token> res;
-    LexerImpl lexer(code);
-    while(!lexer.end())
-        res.push_back(lexer.next());
-    return res;
+    Lexer lexer(code);
+    while(true) {
+        auto tok = lexer.next();
+        if(!tok.has_value())
+            return res;
+        res.push_back(*tok);
+    }
 }
 
 }

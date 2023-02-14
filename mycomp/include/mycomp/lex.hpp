@@ -1,7 +1,10 @@
 #pragma once
 
+#include "scanner.hpp"
+
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -54,6 +57,21 @@ struct Token {
 struct LexException {
     size_t begin_pos, end_pos;
     std::string error;
+};
+
+struct Lexer {
+    Lexer(std::string_view code);
+
+    std::optional<Token> next();
+
+private:
+    void skipWhitespaceAndComments();
+    Token parseNumber();
+    Token parseString();
+    Token parseWord();
+    Token parseSpecialToken();
+
+    Scanner s_;
 };
 
 std::vector<Token> lex(std::string_view code);

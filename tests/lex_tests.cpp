@@ -1,12 +1,12 @@
-#include <cstdint>
-#include <exception>
-#include <mycomp/lex.hpp>
+#include "mycomp/lex.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <fmt/core.h>
 
 #include <iostream>
+#include <cstdint>
+#include <exception>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -23,8 +23,6 @@ std::vector<mycomp::Token> wrap_lex(std::string_view str) {
     }
 }
 
-//////////////////////////////////////////////////////////////////////
-
 TEST_CASE("Lexer: Just works", "[lex]") {
     auto v = wrap_lex("1 + 2");
 
@@ -32,8 +30,6 @@ TEST_CASE("Lexer: Just works", "[lex]") {
     CHECK(v[1].tokenType == PLUS);
     CHECK(v[2].tokenType == NATURAL_NUMBER);
 }
-
-//////////////////////////////////////////////////////////////////////
 
 TEST_CASE("Parens", "[lex]") {
     auto v = wrap_lex("1 + (2)");
@@ -46,8 +42,6 @@ TEST_CASE("Parens", "[lex]") {
     CHECK(get<uint64_t>(v[3].payload) == 2);
     CHECK(v[4].tokenType == RIGHT_PAREN);
 }
-
-///////////////////////////////////////////////////////////////////
 
 TEST_CASE("Keywords", "[lex]") {
     auto v = wrap_lex(
@@ -63,8 +57,6 @@ TEST_CASE("Keywords", "[lex]") {
     CHECK(v[5].tokenType == TRUE);
     CHECK(v[6].tokenType == FALSE);
 }
-
-//////////////////////////////////////////////////////////////////////
 
 TEST_CASE("Consequent", "[lex]") {
     auto v = wrap_lex("!true");
@@ -83,8 +75,6 @@ TEST_CASE("Consequent", "[lex]") {
     CHECK(get<double>(v[4].payload) == 0.2e-2);
 
 }
-
-//////////////////////////////////////////////////////////////////////
 
 TEST_CASE("Comments", "[lex]") {
     auto v = wrap_lex(
@@ -106,8 +96,6 @@ TEST_CASE("Comments", "[lex]") {
     CHECK_THROWS(wrap_lex("/*/"));
 }
 
-//////////////////////////////////////////////////////////////////////
-
 TEST_CASE("Statement", "[lex]") {
     auto v = wrap_lex("var abc = 0;");
 
@@ -118,8 +106,6 @@ TEST_CASE("Statement", "[lex]") {
     CHECK(v[4].tokenType == SEMICOLON);
 }
 
-//////////////////////////////////////////////////////////////////////
-
 TEST_CASE("String literal", "[lex]") {
     auto v = wrap_lex("\"Hello world\"");
 
@@ -128,8 +114,6 @@ TEST_CASE("String literal", "[lex]") {
     CHECK_THROWS(wrap_lex("\" Hello wo"));
     CHECK_THROWS(wrap_lex("\" \\ \"")); // escape seqs arent suuported yet
 }
-
-//////////////////////////////////////////////////////////////////////
 
 TEST_CASE("Funtion declaration args", "[lex]") {
     auto v = wrap_lex("(a1, a_2)");
@@ -141,16 +125,12 @@ TEST_CASE("Funtion declaration args", "[lex]") {
     CHECK(v[4].tokenType == RIGHT_PAREN);
 }
 
-//////////////////////////////////////////////////////////////////////
-
 TEST_CASE("Curly", "[lex]") {
     auto v = wrap_lex("{ }");
 
     CHECK(v[0].tokenType == LEFT_BRACE);
     CHECK(v[1].tokenType == RIGHT_BRACE);
 }
-
-//////////////////////////////////////////////////////////////////////
 
 TEST_CASE("Assign vs Equals", "[lex]") {
     auto v = wrap_lex("== = ==");
@@ -159,9 +139,6 @@ TEST_CASE("Assign vs Equals", "[lex]") {
     CHECK(v[1].tokenType == ASSIGN);
     CHECK(v[2].tokenType == EQUALS);
 }
-
-//////////////////////////////////////////////////////////////////////
-
 
 TEST_CASE("Lexer numbers", "[lex]") {
     constexpr std::string_view zero = "0";

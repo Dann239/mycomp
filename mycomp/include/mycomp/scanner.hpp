@@ -14,13 +14,12 @@ struct Scanner {
         return end() ? '\n' : code_[ind_];
     }
     void advance(std::size_t delta = 1) {
-        if(!end())
-            ind_ += delta;
+        ind_ = std::min(ind_ + delta, code_.size());
     }
     char peek(std::size_t delta = 1) const {
         return ind_ + delta < code_.size() ? code_[ind_ + delta] : '\n';
     }
-    std::string_view substr(std::size_t delta = std::string_view::npos) {
+    std::string_view substr(std::size_t delta = std::string_view::npos) const {
         return code_.substr(ind_, delta);
     }
     std::size_t ind() const {

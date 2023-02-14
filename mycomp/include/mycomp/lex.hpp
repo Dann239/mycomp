@@ -52,6 +52,8 @@ struct Token {
         std::uint64_t,
         double
     > payload;
+
+    bool operator==(const Token&) const = default;
 };
 
 struct LexException {

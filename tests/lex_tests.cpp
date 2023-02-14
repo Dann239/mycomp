@@ -12,72 +12,62 @@
 #include <vector>
 
 using enum mycomp::TokenType;
-using std::get, std::uint64_t;
-
-std::vector<mycomp::Token> wrap_lex(std::string_view str) {
-    try {
-        return mycomp::lex(str);
-    }
-    catch(const mycomp::LexException& e) {
-        throw std::runtime_error(e.error);
-    }
-}
+using std::uint64_t;
 
 TEST_CASE("Lexer: Just works", "[lex]") {
-    auto v = wrap_lex("1 + 2");
+    auto l = mycomp::Lexer("1 + 2");
 
-    CHECK(v[0].tokenType == NATURAL_NUMBER);
-    CHECK(v[1].tokenType == PLUS);
-    CHECK(v[2].tokenType == NATURAL_NUMBER);
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 0, 1, uint64_t{1}});
+    CHECK(l.next().value() == mycomp::Token{PLUS, 2, 3});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 4, 5, uint64_t{2}});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Parens", "[lex]") {
-    auto v = wrap_lex("1 + (2)");
+    auto l = mycomp::Lexer("1 + (2)");
 
-    CHECK(v[0].tokenType == NATURAL_NUMBER);
-    CHECK(get<uint64_t>(v[0].payload) == 1);
-    CHECK(v[1].tokenType == PLUS);
-    CHECK(v[2].tokenType == LEFT_PAREN);
-    CHECK(v[3].tokenType == NATURAL_NUMBER);
-    CHECK(get<uint64_t>(v[3].payload) == 2);
-    CHECK(v[4].tokenType == RIGHT_PAREN);
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 0, 1, uint64_t{1}});
+    CHECK(l.next().value() == mycomp::Token{PLUS, 2, 3});
+    CHECK(l.next().value() == mycomp::Token{LEFT_PAREN, 4, 5});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 5, 6, uint64_t{2}});
+    CHECK(l.next().value() == mycomp::Token{RIGHT_PAREN, 6, 7});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Keywords", "[lex]") {
-    auto v = wrap_lex(
+    auto l = mycomp::Lexer(
             "var fn if else "
             "return true false"
     );
 
-    CHECK(v[0].tokenType == VAR);
-    CHECK(v[1].tokenType == FUN);
-    CHECK(v[2].tokenType == IF);
-    CHECK(v[3].tokenType == ELSE);
-    CHECK(v[4].tokenType == RETURN);
-    CHECK(v[5].tokenType == TRUE);
-    CHECK(v[6].tokenType == FALSE);
+    CHECK(l.next().value() == mycomp::Token{VAR, 0, 3});
+    CHECK(l.next().value() == mycomp::Token{FUN, 4, 6});
+    CHECK(l.next().value() == mycomp::Token{IF, 7, 9});
+    CHECK(l.next().value() == mycomp::Token{ELSE, 10, 14});
+    CHECK(l.next().value() == mycomp::Token{RETURN, 15, 21});
+    CHECK(l.next().value() == mycomp::Token{TRUE, 22, 26});
+    CHECK(l.next().value() == mycomp::Token{FALSE, 27, 32});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Consequent", "[lex]") {
-    auto v = wrap_lex("!true");
+    auto l = mycomp::Lexer("!true");
 
-    CHECK(v[0].tokenType == NOT);
-    CHECK(v[1].tokenType == TRUE);
+    CHECK(l.next().value() == mycomp::Token{NOT, 0, 1});
+    CHECK(l.next().value() == mycomp::Token{TRUE, 1, 5});
+    CHECK(!l.next().has_value());
 
-    v = wrap_lex("1.e-5-1-.2E-2");
-    CHECK(v[0].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[0].payload) == 1e-5);
-    CHECK(v[1].tokenType == MINUS);
-    CHECK(v[2].tokenType == NATURAL_NUMBER);
-    CHECK(get<uint64_t>(v[2].payload) == 1);
-    CHECK(v[3].tokenType == MINUS);
-    CHECK(v[4].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[4].payload) == 0.2e-2);
-
+    l = mycomp::Lexer("1.e-5-1-.2E-2");
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 0, 5, double{1e-5}});
+    CHECK(l.next().value() == mycomp::Token{MINUS, 5, 6});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 6, 7, uint64_t{1}});
+    CHECK(l.next().value() == mycomp::Token{MINUS, 7, 8});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 8, 13, double{0.2e-2}});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Comments", "[lex]") {
-    auto v = wrap_lex(
+    auto l = mycomp::Lexer(
             "/* inline comment // then newline\n"
             "end inline comment //////// */ //\n"
             "// Comment if var a = 1; \n"
@@ -87,88 +77,97 @@ TEST_CASE("Comments", "[lex]") {
 
 
     // parses to just `1`
-    CHECK(v[0].tokenType == NATURAL_NUMBER);
+    CHECK(l.next().value().tokenType == NATURAL_NUMBER);
+    CHECK(!l.next().has_value());
 
-    CHECK_THROWS(wrap_lex("1 2 3 /* comment with no termination\n"));
-    CHECK_THROWS(wrap_lex("forgot to start the comment */ a = 1"));
-    CHECK_THROWS(wrap_lex("*/"));
-    CHECK_THROWS(wrap_lex("/*"));
-    CHECK_THROWS(wrap_lex("/*/"));
+    CHECK_THROWS(mycomp::lex("1 2 3 /* comment with no termination\n"));
+    CHECK_THROWS(mycomp::lex("forgot to start the comment */ a = 1"));
+    CHECK_THROWS(mycomp::lex("*/"));
+    CHECK_THROWS(mycomp::lex("/*"));
+    CHECK_THROWS(mycomp::lex("/*/"));
 }
 
 TEST_CASE("Statement", "[lex]") {
-    auto v = wrap_lex("var abc = 0;");
+    auto l = mycomp::Lexer("var abc = 0;");
 
-    CHECK(v[0].tokenType == VAR);
-    CHECK(v[1].tokenType == IDENTIFIER);
-    CHECK(v[2].tokenType == ASSIGN);
-    CHECK(v[3].tokenType == NATURAL_NUMBER);
-    CHECK(v[4].tokenType == SEMICOLON);
+    CHECK(l.next().value() == mycomp::Token{VAR, 0, 3});
+    CHECK(l.next().value() == mycomp::Token{IDENTIFIER, 4, 7, std::string("abc")});
+    CHECK(l.next().value() == mycomp::Token{ASSIGN, 8, 9});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 10, 11, uint64_t{0}});
+    CHECK(l.next().value() == mycomp::Token{SEMICOLON, 11, 12});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("String literal", "[lex]") {
-    auto v = wrap_lex("\"Hello world\"");
+    auto l = mycomp::Lexer("\"Hello world\"");
 
-    CHECK(v[0].tokenType == STRING);
+    CHECK(l.next().value() == mycomp::Token{STRING, 0, 13, std::string("Hello world")});
+    CHECK(!l.next().has_value());
 
-    CHECK_THROWS(wrap_lex("\" Hello wo"));
-    CHECK_THROWS(wrap_lex("\" \\ \"")); // escape seqs arent suuported yet
+    CHECK_THROWS(mycomp::lex("\" Hello wo"));
+    CHECK_THROWS(mycomp::lex("\" \\ \"")); // escape seqs arent suuported yet
 }
 
 TEST_CASE("Funtion declaration args", "[lex]") {
-    auto v = wrap_lex("(a1, a_2)");
+    auto l = mycomp::Lexer("(a1, a_2)");
 
-    CHECK(v[0].tokenType == LEFT_PAREN);
-    CHECK(v[1].tokenType == IDENTIFIER);
-    CHECK(v[2].tokenType == COMMA);
-    CHECK(v[3].tokenType == IDENTIFIER);
-    CHECK(v[4].tokenType == RIGHT_PAREN);
+    CHECK(l.next().value() == mycomp::Token{LEFT_PAREN, 0, 1});
+    CHECK(l.next().value() == mycomp::Token{IDENTIFIER, 1, 3, std::string("a1")});
+    CHECK(l.next().value() == mycomp::Token{COMMA, 3, 4});
+    CHECK(l.next().value() == mycomp::Token{IDENTIFIER, 5, 8, std::string("a_2")});
+    CHECK(l.next().value() == mycomp::Token{RIGHT_PAREN, 8, 9});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Curly", "[lex]") {
-    auto v = wrap_lex("{ }");
+    auto l = mycomp::Lexer("{ }");
 
-    CHECK(v[0].tokenType == LEFT_BRACE);
-    CHECK(v[1].tokenType == RIGHT_BRACE);
+    CHECK(l.next().value() == mycomp::Token{LEFT_BRACE, 0, 1});
+    CHECK(l.next().value() == mycomp::Token{RIGHT_BRACE, 2, 3});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Assign vs Equals", "[lex]") {
-    auto v = wrap_lex("== = ==");
+    auto l = mycomp::Lexer("== = ==");
 
-    CHECK(v[0].tokenType == EQUALS);
-    CHECK(v[1].tokenType == ASSIGN);
-    CHECK(v[2].tokenType == EQUALS);
+    CHECK(l.next().value() == mycomp::Token{EQUALS, 0, 2});
+    CHECK(l.next().value() == mycomp::Token{ASSIGN, 3, 4});
+    CHECK(l.next().value() == mycomp::Token{EQUALS, 5, 7});
+    CHECK(!l.next().has_value());
 }
 
 TEST_CASE("Lexer numbers", "[lex]") {
     constexpr std::string_view zero = "0";
     static_assert(zero.size() == 1);
 
-    auto v = wrap_lex(zero);
-    CHECK(get<uint64_t>(v[0].payload) == 0);
+    auto l = mycomp::Lexer(zero);
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 0, 1, uint64_t{0}});
+    CHECK(!l.next().has_value());
 
-    v = wrap_lex("1e5 100500 1.1e-4 0x10 0x10.8 .1 0");
-    CHECK(v[0].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[0].payload) == 1.e5);
-    CHECK(v[1].tokenType == NATURAL_NUMBER);
-    CHECK(get<uint64_t>(v[1].payload) == 100500);
-    CHECK(v[2].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[2].payload) == 1.1e-4);
-    CHECK(v[3].tokenType == NATURAL_NUMBER);
-    CHECK(get<uint64_t>(v[3].payload) == 16);
-    CHECK(v[4].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[4].payload) == 16.5);
-    CHECK(v[5].tokenType == REAL_NUMBER);
-    CHECK(get<double>(v[5].payload) == 0.1);
+    l = mycomp::Lexer("6");
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 0, 1, uint64_t{6}});
+    CHECK(!l.next().has_value());
 
-    CHECK_THROWS(wrap_lex("0777"));
-    CHECK_THROWS(wrap_lex("0x"));
-    CHECK_THROWS(wrap_lex("1e4.5"));
-    CHECK_THROWS(wrap_lex("1000000000000000000000000000"));
+
+    l = mycomp::Lexer("1e5 100500 1.1e-4 0x10 -0x10.8 .1 0");
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 0, 3, double{1e5}});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 4, 10, uint64_t{100500}});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 11, 17, double{1.1e-4}});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 18, 22, uint64_t{16}});
+    CHECK(l.next().value() == mycomp::Token{MINUS, 23, 24});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 24, 30, double{16.5}});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 31, 33, double{0.1}});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 34, 35, uint64_t{0}});
+    CHECK(!l.next().has_value());
+
+    CHECK_THROWS(mycomp::lex("0777"));
+    CHECK_THROWS(mycomp::lex("0x"));
+    CHECK_THROWS(mycomp::lex("1e4.5"));
+    CHECK_THROWS(mycomp::lex("1000000000000000000000000000"));
 }
 
 TEST_CASE("Almost a keyword", "[lex]") {
-    auto v = wrap_lex("tru");
-    CHECK(v[0].tokenType == IDENTIFIER);
-    CHECK(get<std::string>(v[0].payload) == "tru");
+    auto l = mycomp::Lexer("tru");
+    CHECK(l.next().value() == mycomp::Token{IDENTIFIER, 0, 3, std::string("tru")});
+    CHECK(!l.next().has_value());
 }

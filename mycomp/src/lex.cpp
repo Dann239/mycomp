@@ -278,12 +278,12 @@ Token Lexer::parseWord() {
 
 Token Lexer::parseSpecialToken() {
     for(auto [str, tok] : special_tokens)
-        if(s_.substr().starts_with(str)) {
+        if(s_.substr(str.size()) == str) {
             s_.advance(str.size());
             return Token{
                 .tokenType=tok,
-                .begin_pos=s_.ind(),
-                .end_pos=s_.ind() + str.size()
+                .begin_pos=s_.ind() - str.size(),
+                .end_pos=s_.ind()
             };
         }
 

@@ -5,4 +5,4 @@ add_executable(tests
     lex_tests.cpp
 )
 
-target_link_libraries(tests PRIVATE mycomp Catch2::Catch2WithMain)
+target_link_libraries(tests PRIVATE mycomp magic_enum Catch2::Catch2WithMain)

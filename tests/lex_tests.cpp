@@ -1,18 +1,39 @@
 #include "mycomp/lex.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_translate_exception.hpp>
 
 #include <fmt/core.h>
+#include <magic_enum.hpp>
 
 #include <iostream>
 #include <cstdint>
 #include <exception>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 using enum mycomp::TokenType;
 using std::uint64_t;
+
+CATCH_TRANSLATE_EXCEPTION(const mycomp::LexException& e) {
+    return e.error;
+}
+
+template<>
+struct Catch::StringMaker<mycomp::Token> {
+    static std::string convert(const mycomp::Token& tok) {
+        auto to_str = []<typename T>(const T& sth) -> std::string {
+            if constexpr (std::is_same_v<T, std::monostate>)
+                return "";
+            else
+                return fmt::format("{}", sth);
+        };
+        return fmt::format("{}({}) at [{}, {})", magic_enum::enum_name(tok.tokenType), std::visit(to_str, tok.payload), tok.begin_pos, tok.end_pos);
+    }
+};
 
 TEST_CASE("Lexer: Just works", "[lex]") {
     auto l = mycomp::Lexer("1 + 2");
@@ -57,12 +78,15 @@ TEST_CASE("Consequent", "[lex]") {
     CHECK(l.next().value() == mycomp::Token{TRUE, 1, 5});
     CHECK(!l.next().has_value());
 
-    l = mycomp::Lexer("1.e-5-1-.2E-2");
+    l = mycomp::Lexer("1.e-5-1-.2E-2-7e+3");
     CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 0, 5, double{1e-5}});
     CHECK(l.next().value() == mycomp::Token{MINUS, 5, 6});
     CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 6, 7, uint64_t{1}});
     CHECK(l.next().value() == mycomp::Token{MINUS, 7, 8});
     CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 8, 13, double{0.2e-2}});
+    CHECK(l.next().value() == mycomp::Token{MINUS, 13, 14});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 14, 18, double{7e3}});
+
     CHECK(!l.next().has_value());
 }
 
@@ -169,5 +193,13 @@ TEST_CASE("Lexer numbers", "[lex]") {
 TEST_CASE("Almost a keyword", "[lex]") {
     auto l = mycomp::Lexer("tru");
     CHECK(l.next().value() == mycomp::Token{IDENTIFIER, 0, 3, std::string("tru")});
+    CHECK(!l.next().has_value());
+}
+
+TEST_CASE("Hexadecimal chicanery", "[lex]") {
+    auto l = mycomp::Lexer("0xaBacaBa 0Xee 0x1p+2");
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 0, 9, uint64_t{0xabacaba}});
+    CHECK(l.next().value() == mycomp::Token{NATURAL_NUMBER, 10, 14, uint64_t{0xee}});
+    CHECK(l.next().value() == mycomp::Token{REAL_NUMBER, 15, 21, double{0x1p2}});
     CHECK(!l.next().has_value());
 }

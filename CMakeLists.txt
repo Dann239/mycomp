@@ -15,6 +15,9 @@ find_package(fmt REQUIRED)
 target_compile_definitions(fmt::fmt INTERFACE FMT_ENFORCE_COMPILE_STRING)
 add_library(fmt ALIAS fmt::fmt)
 
+find_package(magic_enum REQUIRED)
+add_library(magic_enum ALIAS magic_enum::magic_enum)
+
 find_package(Catch2 REQUIRED)
 
 add_subdirectory(mycomp)

@@ -149,22 +149,22 @@ Token Lexer::parseNumber() {
             else
                 has_point = true;
         }
-        else if(c == 'e' || c == 'E') {
+        else if(is_base16 ? (c == 'p' || c == 'P') : (c == 'e' || c == 'E')) {
             if(has_exponent)
                 throw LexException{
                     .begin_pos=s_.ind(),
                     .end_pos=s_.ind() + 1,
-                    .error="Unexpected E in a number!"
+                    .error="Unexpected exponent in a number!"
                 };
             else {
                 has_exponent = true;
-                if(s_.peek() == '-')
-                    s_.advance(); // '-' is ok here
+                if(s_.peek() == '-' || s_.peek() == '+')
+                    s_.advance(); // '-' or '+' is ok here
             }
         }
         else if(std::isspace(c) || std::ispunct(c))
             break;
-        else if(!std::isdigit(c))
+        else if(is_base16 ? !std::isxdigit(c) : !std::isdigit(c))
             throw LexException{
                 .begin_pos=s_.ind(),
                 .end_pos=s_.ind() + 1,

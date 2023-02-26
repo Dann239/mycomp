@@ -1,12 +1,12 @@
 #include "mycomp/lex.hpp"
 
-#include <cstdint>
 #include <fmt/core.h>
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string_view>
 #include <system_error>

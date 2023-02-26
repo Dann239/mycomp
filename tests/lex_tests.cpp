@@ -1,10 +1,8 @@
 #include "mycomp/lex.hpp"
+#include "mycomp/utils/token_to_string.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_translate_exception.hpp>
-
-#include <fmt/core.h>
-#include <magic_enum.hpp>
 
 #include <iostream>
 #include <cstdint>
@@ -25,13 +23,7 @@ CATCH_TRANSLATE_EXCEPTION(const mycomp::LexException& e) {
 template<>
 struct Catch::StringMaker<mycomp::Token> {
     static std::string convert(const mycomp::Token& tok) {
-        auto to_str = []<typename T>(const T& sth) -> std::string {
-            if constexpr (std::is_same_v<T, std::monostate>)
-                return "";
-            else
-                return fmt::format("{}", sth);
-        };
-        return fmt::format("{}({}) at [{}, {})", magic_enum::enum_name(tok.tokenType), std::visit(to_str, tok.payload), tok.begin_pos, tok.end_pos);
+        return mycomp::token_to_string(tok);
     }
 };
 

@@ -51,7 +51,7 @@ struct Token {
         std::string,
         std::uint64_t,
         double
-    > payload;
+    > payload = {};
 
     bool operator==(const Token&) const = default;
 };

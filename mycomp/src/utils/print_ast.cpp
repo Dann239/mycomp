@@ -18,7 +18,7 @@ struct AstPrinter: AstVisitor {
             e->acceptVisitor(*this);
         depth--;
     }
-    void visit(const AstNodeBody<TYPE>& v) override {
+    void visit(const AstNodeBody<PRIMITIVE_TYPE>& v) override {
         printPrefix();
         fmt::print("Type\n");
         depth++;
@@ -31,14 +31,14 @@ struct AstPrinter: AstVisitor {
         fmt::print("FunctionDecl\n");
         depth++;
         printToken(v.name);
-        v.type.acceptVisitor(*this);
+        v.type->acceptVisitor(*this);
         depth--;
     }
     void visit(const AstNodeBody<VARIABLE_DECL>& v) override {
         printPrefix();
         fmt::print("VariableDecl\n");
         depth++;
-        v.type.acceptVisitor(*this);
+        v.type->acceptVisitor(*this);
         printToken(v.name);
         v.value->acceptVisitor(*this);
         depth--;

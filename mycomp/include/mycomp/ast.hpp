@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lex.hpp"
+#include "utils/specialization_of.hpp"
 
 #include <memory>
 #include <type_traits>
@@ -10,7 +11,7 @@ namespace mycomp {
 
 enum class AstNodeType {
     MODULE,
-    TYPE,
+    PRIMITIVE_TYPE,
 
     FUNCTION_DECL,
     VARIABLE_DECL,
@@ -26,7 +27,7 @@ enum class AstNodeType {
     LITERAL_EXPR
 };
 
-template<AstNodeType type> struct ConcreteAstNode;
+template<AstNodeType type> struct AstNodeConcrete;
 
 struct AstVisitor;
 
@@ -38,13 +39,38 @@ struct AstNode {
 template<AstNodeType>
 struct AstNodeBody;
 
+
+enum class AstCategoryType {
+    DECLARATION,
+    STATEMENT,
+    EXPRESSION,
+    TYPE,
+    MODULE
+};
+
+template<AstCategoryType type>
+struct AstCategory : AstNode {
+};
+
+template<AstCategoryType type>
+using AstPtr = std::unique_ptr<AstCategory<type>>;
+
+using DeclPtr = AstPtr<AstCategoryType::DECLARATION>;
+using StmtPtr = AstPtr<AstCategoryType::STATEMENT>;
+using ExprPtr = AstPtr<AstCategoryType::EXPRESSION>;
+using TypePtr = AstPtr<AstCategoryType::TYPE>;
+using ModulePtr = AstPtr<AstCategoryType::MODULE>;
+
+template<typename T, AstCategoryType type>
+concept AstBodyOf = SpecializationOf2<T, AstNodeBody> && T::category == type;
+
 template<AstNodeType type>
-struct ConcreteAstNode :
-    AstNodeBody<type>::Parent
+struct AstNodeConcrete :
+    AstCategory<AstNodeBody<type>::category>
 {
     void acceptVisitor(AstVisitor& visitor) const final; // defined in ast_visitor.hpp
 
-    ConcreteAstNode(AstNodeBody<type> body) :
+    AstNodeConcrete(AstNodeBody<type> body) :
         body_(std::move(body))
     {}
 
@@ -53,23 +79,22 @@ struct ConcreteAstNode :
 
 template<AstNodeType type>
 auto make_ast_node(AstNodeBody<type> body) {
-    return std::unique_ptr<typename AstNodeBody<type>::Parent>(new ConcreteAstNode<type>{std::move(body)});
+    return AstPtr<AstNodeBody<type>::category>(new AstNodeConcrete<type>{std::move(body)});
 }
 
-struct Declaration : AstNode {
-};
-struct Statement : AstNode {
-};
-struct Expression : AstNode {
-};
+
+// MODULE
 
 template<> struct AstNodeBody<AstNodeType::MODULE> {
-    using Parent = AstNode;
-    std::vector<std::unique_ptr<Declaration>> decls;
+    static constexpr auto category = AstCategoryType::MODULE;
+    std::vector<DeclPtr> decls;
 };
 
-template<> struct AstNodeBody<AstNodeType::TYPE> {
-    using Parent = AstNode;
+
+// TYPES
+
+template<> struct AstNodeBody<AstNodeType::PRIMITIVE_TYPE> {
+    static constexpr auto category = AstCategoryType::TYPE;
     Token body;
 };
 
@@ -77,73 +102,73 @@ template<> struct AstNodeBody<AstNodeType::TYPE> {
 // Declarations
 
 template<> struct AstNodeBody<AstNodeType::FUNCTION_DECL> {
-    using Parent = Declaration;
+    static constexpr auto category = AstCategoryType::DECLARATION;
     Token name;
-    ConcreteAstNode<AstNodeType::TYPE> type;
+    TypePtr type;
     // ??? std::vector<std::pair<Token, Type>> args;
     // ??? TODO
 };
 
 template<> struct AstNodeBody<AstNodeType::VARIABLE_DECL> {
-    using Parent = Declaration;
+    static constexpr auto category = AstCategoryType::DECLARATION;
     Token name;
-    ConcreteAstNode<AstNodeType::TYPE> type;
-    std::unique_ptr<Expression> value;
+    TypePtr type;
+    ExprPtr value;
 };
 
 
 // Statements
 
 template<> struct AstNodeBody<AstNodeType::ASSIGNMENT_STMT> {
-    using Parent = Statement;
+    static constexpr auto category = AstCategoryType::STATEMENT;
     Token var;
-    std::unique_ptr<Expression> value;
+    ExprPtr value;
 };
 
 template<> struct AstNodeBody<AstNodeType::EXPR_STMT> {
-    using Parent = Statement;
-    std::unique_ptr<Expression> body;
+    static constexpr auto category = AstCategoryType::STATEMENT;
+    ExprPtr body;
 };
 
 
 // Expressions
 
 template<> struct AstNodeBody<AstNodeType::UNARY_EXPR> {
-    using Parent = Expression;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
     Token op;
-    std::unique_ptr<Expression> expr;
+    ExprPtr expr;
 };
 
 template<> struct AstNodeBody<AstNodeType::BINARY_EXPR> {
-    using Parent = Expression;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
     Token op;
-    std::unique_ptr<Expression> lhs, rhs;
+    ExprPtr lhs, rhs;
 };
 
 template<> struct AstNodeBody<AstNodeType::COMPOUND_EXPR> {
-    using Parent = Expression;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
     std::vector<
         std::variant<
-            std::unique_ptr<Declaration>,
-            std::unique_ptr<Statement>
+            DeclPtr,
+            StmtPtr
         >
     > preface;
 
-    std::unique_ptr<Expression> last;
+    ExprPtr last;
 };
 
 template<> struct AstNodeBody<AstNodeType::IF_EXPR> {
-    using Parent = Expression;
-    std::unique_ptr<Expression> cond, on_true, on_false;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
+    ExprPtr cond, on_true, on_false;
 };
 
 template<> struct AstNodeBody<AstNodeType::RETURN_EXPR> {
-    using Parent = Expression;
-    std::unique_ptr<Expression> result;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
+    ExprPtr result;
 };
 
 template<> struct AstNodeBody<AstNodeType::LITERAL_EXPR> {
-    using Parent = Expression;
+    static constexpr auto category = AstCategoryType::EXPRESSION;
     Token body;
 };
 

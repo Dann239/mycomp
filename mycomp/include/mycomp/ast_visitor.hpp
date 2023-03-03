@@ -2,6 +2,8 @@
 
 #include "ast.hpp"
 
+#include "utils/apply_enum.hpp"
+
 #include <magic_enum.hpp>
 
 namespace mycomp {
@@ -19,13 +21,7 @@ struct AstVisitorImpl<type> {
     virtual ~AstVisitorImpl() = default;
 };
 
-using AstVisitorImplAll = std::remove_pointer_t<decltype(
-    []<auto... inds>
-    (std::index_sequence<inds...>)
-    -> AstVisitorImpl<magic_enum::enum_value<AstNodeType>(inds)...>*
-    { return {}; }
-    (std::make_index_sequence<magic_enum::enum_count<AstNodeType>()>{})
-)>;
+using AstVisitorImplAll = ApplyEnum<AstNodeType, AstVisitorImpl>;
 
 }
 
@@ -34,7 +30,7 @@ struct AstVisitor :
 {};
 
 template<AstNodeType type>
-void ConcreteAstNode<type>::acceptVisitor(AstVisitor& visitor) const {
+void AstNodeConcrete<type>::acceptVisitor(AstVisitor& visitor) const {
     detail::AstVisitorImpl<type>& visitor_impl = visitor;
     visitor_impl.visit(body_);
 }

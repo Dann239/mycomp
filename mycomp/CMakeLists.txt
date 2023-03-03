@@ -1,5 +1,6 @@
 add_library(mycomp
     src/lex.cpp
+    src/ast.cpp
     src/utils/token_to_string.cpp
     src/utils/print_ast.cpp
 )

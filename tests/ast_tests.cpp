@@ -28,10 +28,10 @@ TEST_CASE("AST: try printing", "[ast]") {
     using enum TokenType;
     using enum AstNodeType;
 
-    auto module = make_ast_node(AstNodeBody<MODULE>{.decls = make_vector(
+    auto module = make_ast_node(AstNodeBody<MODULE>{.decls = make_vector<DeclPtr>(
         make_ast_node(AstNodeBody<VARIABLE_DECL>{
             .name = Token{IDENTIFIER, 0, 0, std::string("foo")},
-            .type = AstNodeBody<TYPE>{.body = Token{IDENTIFIER, 0, 0, std::string("int")}},
+            .type = make_ast_node(AstNodeBody<PRIMITIVE_TYPE>{.body = Token{IDENTIFIER, 0, 0, std::string("int")}}),
             .value = make_ast_node(AstNodeBody<BINARY_EXPR>{
                 .op = Token{PLUS, 0, 0},
                 .lhs = make_ast_node(AstNodeBody<LITERAL_EXPR>{.body = Token{NATURAL_NUMBER, 0, 0, std::uint64_t{1}}}),

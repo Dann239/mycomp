@@ -2,11 +2,31 @@
 
 #include "lex.hpp"
 
-#include <concepts>
 #include <memory>
-#include <variant>
+#include <type_traits>
+#include <utility>
 
 namespace mycomp {
+
+enum class AstNodeType {
+    MODULE,
+    TYPE,
+
+    FUNCTION_DECL,
+    VARIABLE_DECL,
+
+    ASSIGNMENT_STMT,
+    EXPR_STMT,
+
+    UNARY_EXPR,
+    BINARY_EXPR,
+    COMPOUND_EXPR,
+    IF_EXPR,
+    RETURN_EXPR,
+    LITERAL_EXPR
+};
+
+template<AstNodeType type> struct ConcreteAstNode;
 
 struct AstVisitor;
 
@@ -15,95 +35,93 @@ struct AstNode {
     virtual ~AstNode() = default;
 };
 
-struct Declaration : virtual AstNode {
-};
-struct Statement : virtual AstNode {
-};
-struct Expression : virtual AstNode {
-};
+template<AstNodeType>
+struct AstNodeBody;
 
-template<typename T>
-struct AstVisitable : virtual AstNode {
-    void acceptVisitor(AstVisitor& visitor) const final;
-};
-
-struct Module :
-    AstVisitable<Module>,
-    virtual AstNode
+template<AstNodeType type>
+struct ConcreteAstNode :
+    AstNodeBody<type>::Parent
 {
+    void acceptVisitor(AstVisitor& visitor) const final; // defined in ast_visitor.hpp
+
+    ConcreteAstNode(AstNodeBody<type> body) :
+        body_(std::move(body))
+    {}
+
+    AstNodeBody<type> body_;
+};
+
+template<AstNodeType type>
+auto make_ast_node(AstNodeBody<type> body) {
+    return std::unique_ptr<typename AstNodeBody<type>::Parent>(new ConcreteAstNode<type>{std::move(body)});
+}
+
+struct Declaration : AstNode {
+};
+struct Statement : AstNode {
+};
+struct Expression : AstNode {
+};
+
+template<> struct AstNodeBody<AstNodeType::MODULE> {
+    using Parent = AstNode;
     std::vector<std::unique_ptr<Declaration>> decls;
 };
 
-struct Type :
-    AstVisitable<Type>,
-    virtual AstNode
-{
+template<> struct AstNodeBody<AstNodeType::TYPE> {
+    using Parent = AstNode;
     Token body;
 };
 
 
 // Declarations
 
-struct FunctionDecl :
-    AstVisitable<FunctionDecl>,
-    Declaration
-{
+template<> struct AstNodeBody<AstNodeType::FUNCTION_DECL> {
+    using Parent = Declaration;
     Token name;
-    Type type;
+    ConcreteAstNode<AstNodeType::TYPE> type;
     // ??? std::vector<std::pair<Token, Type>> args;
     // ??? TODO
 };
 
-struct VariableDecl :
-    AstVisitable<VariableDecl>,
-    Declaration
-{
+template<> struct AstNodeBody<AstNodeType::VARIABLE_DECL> {
+    using Parent = Declaration;
     Token name;
-    Type type;
+    ConcreteAstNode<AstNodeType::TYPE> type;
     std::unique_ptr<Expression> value;
 };
 
 
 // Statements
 
-struct AssignmentStmt :
-    AstVisitable<AssignmentStmt>,
-    Declaration
-{
+template<> struct AstNodeBody<AstNodeType::ASSIGNMENT_STMT> {
+    using Parent = Statement;
     Token var;
     std::unique_ptr<Expression> value;
 };
 
-struct ExprStmt :
-    AstVisitable<ExprStmt>,
-    Declaration
-{
+template<> struct AstNodeBody<AstNodeType::EXPR_STMT> {
+    using Parent = Statement;
     std::unique_ptr<Expression> body;
 };
 
 
 // Expressions
 
-struct UnaryExpr :
-    AstVisitable<UnaryExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::UNARY_EXPR> {
+    using Parent = Expression;
     Token op;
     std::unique_ptr<Expression> expr;
 };
 
-struct BinaryExpr :
-    AstVisitable<BinaryExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::BINARY_EXPR> {
+    using Parent = Expression;
     Token op;
     std::unique_ptr<Expression> lhs, rhs;
 };
 
-struct CompoundExpr :
-    AstVisitable<CompoundExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::COMPOUND_EXPR> {
+    using Parent = Expression;
     std::vector<
         std::variant<
             std::unique_ptr<Declaration>,
@@ -114,51 +132,19 @@ struct CompoundExpr :
     std::unique_ptr<Expression> last;
 };
 
-struct IfExpr :
-    AstVisitable<IfExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::IF_EXPR> {
+    using Parent = Expression;
     std::unique_ptr<Expression> cond, on_true, on_false;
 };
 
-struct ReturnExpr :
-    AstVisitable<ReturnExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::RETURN_EXPR> {
+    using Parent = Expression;
     std::unique_ptr<Expression> result;
 };
 
-struct LiteralExpr :
-    AstVisitable<LiteralExpr>,
-    Expression
-{
+template<> struct AstNodeBody<AstNodeType::LITERAL_EXPR> {
+    using Parent = Expression;
     Token body;
 };
-
-
-struct AstVisitor {
-    virtual void visit(const Module& v) = 0;
-    virtual void visit(const Type& v) = 0;
-
-    virtual void visit(const FunctionDecl& v) = 0;
-    virtual void visit(const VariableDecl& v) = 0;
-
-    virtual void visit(const AssignmentStmt& v) = 0;
-    virtual void visit(const ExprStmt& v) = 0;
-
-    virtual void visit(const UnaryExpr& v) = 0;
-    virtual void visit(const BinaryExpr& v) = 0;
-    virtual void visit(const CompoundExpr& v) = 0;
-    virtual void visit(const IfExpr& v) = 0;
-    virtual void visit(const ReturnExpr& v) = 0;
-    virtual void visit(const LiteralExpr& v) = 0;
-
-    virtual ~AstVisitor() = default;
-};
-
-template<typename T>
-void AstVisitable<T>::acceptVisitor(AstVisitor& visitor) const {
-    visitor.visit(dynamic_cast<const T&>(*this));
-}
 
 }
